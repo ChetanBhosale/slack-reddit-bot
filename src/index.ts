@@ -1,13 +1,44 @@
 import Snoowrap from "snoowrap";
 import dotenv from "dotenv";
-import fs from "fs/promises";
 import { WebClient } from "@slack/web-api";
 import cron from "node-cron";
-import express from 'express'
+import express from "express";
+import mongoose from "mongoose";
 
 dotenv.config();
 
 const app = express();
+
+const redditPostSchema = new mongoose.Schema({
+  postId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
+  subreddit: {
+    type: String,
+    required: true,
+  },
+  title: {
+    type: String,
+    required: true,
+  },
+  url: {
+    type: String,
+    required: true,
+  },
+  sentToSlack: {
+    type: Boolean,
+    default: false,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const RedditPost = mongoose.model("RedditPost", redditPostSchema);
 
 const reddit = new Snoowrap({
   userAgent: "linkrunner-reddit-bot/1.0.0 by u/your_reddit_username",
@@ -21,33 +52,52 @@ const slackClient = new WebClient(process.env.SLACK_TOKEN);
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID!;
 
 const SUBREDDITS = [
-  "startup",
-  "mobilemarketing",
-  "marketing",
-  "Entrepreneur",
-  "SaaS",
-  "growthhacking",
-  "AppMarketing",
-  "mobileapps",
-  "learnprogramming",
-  "webdev",
-  "indiehackers",
-  "androiddev",
-  "iOSProgramming",
-  "reactnative",
-  "digitalnomad",
-  "SideProject",
-  "IMadeThis",
-  "smallbusiness",
-  "EntrepreneurRideAlong",
-  "startups",
-  "marketing_digital",
-  "AskMarketing",
-  "socialmedia",
-  "PPC",
+  "adops",
+  "advertising",
   "analytics",
-  "AppIdeas",
+  "androiddev",
   "AppBusiness",
+  "AppHookup",
+  "AppIdeas",
+  "AppleSearchAds",
+  "appmarketing",
+  "AskMarketing",
+  "ASO",
+  "bigseo",
+  "developersIndia",
+  "DigitalMarketing",
+  "digitalnomad",
+  "Entrepreneur",
+  "EntrepreneurRideAlong",
+  "FacebookAds",
+  "FacebookMarketing",
+  "SKAdNetwork",
+  "appinstalltracking",
+  "install",
+  "uninstall",
+  "googleads",
+  "GrowthHacking",
+  "IMadeThis",
+  "indianstartups",
+  "indiehackers",
+  "iOSMarketing",
+  "iOSProgramming",
+  "learnprogramming",
+  "marketing",
+  "marketing_digital",
+  "MMPCommunity",
+  "mobileapps",
+  "mobiledev",
+  "mobilegamemarketing",
+  "mobilemarketing",
+  "PPC",
+  "reactnative",
+  "SaaS",
+  "SideProject",
+  "smallbusiness",
+  "socialmedia",
+  "startup",
+  "startups",
 ];
 
 const KEYWORDS = [
@@ -70,23 +120,22 @@ const KEYWORDS = [
   "firebase analytics issue",
   "campaign tracking issue",
   "mobile marketing tool",
+  "ads tracking",
+  "install tracking",
+  "track uninstall",
 ];
 
-const HISTORY_FILE = "./history.json";
 const POST_LIMIT = 40;
-const DELAY_BETWEEN_SUBREDDITS = 60000;
+const DELAY_BETWEEN_SUBREDDITS = 600000;
 
-async function loadHistory(): Promise<Set<string>> {
+async function connectDB() {
   try {
-    const data = await fs.readFile(HISTORY_FILE, "utf-8");
-    return new Set(JSON.parse(data));
-  } catch {
-    return new Set();
+    await mongoose.connect(process.env.MONGODB_URL!);
+    console.log("MongoDB connected successfully");
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    process.exit(1);
   }
-}
-
-async function saveHistory(history: Set<string>) {
-  await fs.writeFile(HISTORY_FILE, JSON.stringify([...history], null, 2));
 }
 
 function containsKeyword(text: string): boolean {
@@ -98,7 +147,34 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function sendToSlack(posts: { title: string; url: string; subreddit: string }[]) {
+async function isPostAlreadySent(postId: string): Promise<boolean> {
+  const existingPost = await RedditPost.findOne({ postId });
+  return existingPost !== null;
+}
+
+async function savePostToDatabase(postData: {
+  postId: string;
+  subreddit: string;
+  title: string;
+  url: string;
+}) {
+  try {
+    await RedditPost.create({
+      ...postData,
+      sentToSlack: true,
+    });
+  } catch (error) {
+    if ((error as any).code === 11000) {
+      console.log(`Post ${postData.postId} already exists in database`);
+    } else {
+      console.error("Error saving post to database:", error);
+    }
+  }
+}
+
+async function sendToSlack(
+  posts: { title: string; url: string; subreddit: string; postId: string }[]
+) {
   if (!slackClient || !SLACK_CHANNEL_ID) return;
   const messageBlocks = posts.map((p) => ({
     type: "section",
@@ -115,39 +191,52 @@ async function sendToSlack(posts: { title: string; url: string; subreddit: strin
   });
 
   console.log("Sent new posts to Slack!");
+
+  for (const post of posts) {
+    await savePostToDatabase({
+      postId: post.postId,
+      subreddit: post.subreddit,
+      title: post.title,
+      url: post.url,
+    });
+  }
 }
 
 async function fetchPosts() {
   const startTime = new Date().toLocaleString();
   console.log(`\nStarting fetch at ${startTime}`);
-  
-  const history = await loadHistory();
-  console.log(`History loaded: ${history.size} posts tracked`);
 
   for (let i = 0; i < SUBREDDITS.length; i++) {
     const sub = SUBREDDITS[i]!;
     console.log(`\n[${i + 1}/${SUBREDDITS.length}] Fetching r/${sub}...`);
-    
-    const subredditPosts: { title: string; url: string; subreddit: string }[] = [];
-    
+
+    const subredditPosts: {
+      title: string;
+      url: string;
+      subreddit: string;
+      postId: string;
+    }[] = [];
+
     try {
-      const posts = await reddit.getSubreddit(sub).getHot({ limit: POST_LIMIT });
+      const posts = await reddit.getSubreddit(sub).getNew({ limit: POST_LIMIT });
       console.log(`Fetched ${posts.length} posts from r/${sub}`);
-      
+
       for (const post of posts) {
+        const alreadySent = await isPostAlreadySent(post.id);
+
         if (
-          !history.has(post.id) &&
+          !alreadySent &&
           containsKeyword(post.title + " " + post.selftext)
         ) {
           subredditPosts.push({
+            postId: post.id,
             title: post.title,
             url: `https://reddit.com${post.permalink}`,
             subreddit: sub,
           });
-          history.add(post.id);
         }
       }
-      
+
       if (subredditPosts.length > 0) {
         console.log(`  > Found ${subredditPosts.length} relevant post(s)`);
         console.log(`\nPosts from r/${sub}:\n`);
@@ -157,7 +246,6 @@ async function fetchPosts() {
 
         try {
           await sendToSlack(subredditPosts);
-          await saveHistory(history);
         } catch (error) {
           console.error("Failed to send to Slack:", error);
         }
@@ -177,23 +265,32 @@ async function fetchPosts() {
   console.log(`\nFetch completed at ${new Date().toLocaleString()}`);
 }
 
-console.log("Reddit Bot starting...");
-fetchPosts().catch(console.error);
+async function startBot() {
+  await connectDB();
 
-cron.schedule("0 12 * * *", () => {
-  console.log("\nCron job triggered");
-  fetchPosts().catch(console.error);
-});
+  console.log("Reddit Bot starting...");
 
-console.log("Cron job scheduled: Every day at 12:00 PM");
+  cron.schedule("0 12 * * *", () => {
+    console.log("\nCron job triggered");
+    fetchPosts().catch(console.error);
+  });
 
-process.on("SIGINT", () => {
+  console.log("Cron job scheduled: Every day at 12:00 PM");
+}
+
+startBot().catch(console.error);
+
+process.on("SIGINT", async () => {
   console.log("\nShutting down gracefully...");
+  await mongoose.disconnect();
   process.exit(0);
 });
 
+const PORT = process.env.PORT || 3000;
 
-const PORT = process.env.PORT
+app.get("/", (req, res) => {
+  res.json({ status: "Reddit Bot is running", nextRun: "12:00 PM daily" });
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

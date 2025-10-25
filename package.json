@@ -16,10 +16,12 @@
   "dependencies": {
     "@slack/web-api": "^7.12.0",
     "@types/express": "^5.0.4",
+    "@types/mongoose": "^5.11.96",
     "axios": "^1.12.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
+    "mongoose": "^8.19.2",
     "node-cron": "^4.2.1",
     "snoowrap": "^1.23.0",
     "typescript": "^5.9.3",
