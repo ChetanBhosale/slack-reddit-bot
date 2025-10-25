@@ -71,7 +71,7 @@ const KEYWORDS = [
 
 const HISTORY_FILE = "./history.json";
 const POST_LIMIT = 40;
-const DELAY_BETWEEN_SUBREDDITS = 60000;
+const DELAY_BETWEEN_SUBREDDITS = 600000;
 
 async function loadHistory(): Promise<Set<string>> {
   try {
@@ -120,63 +120,58 @@ async function fetchPosts() {
   
   const history = await loadHistory();
   console.log(`History loaded: ${history.size} posts tracked`);
-  
-  const newPosts: { title: string; url: string; subreddit: string }[] = [];
 
   for (let i = 0; i < SUBREDDITS.length; i++) {
     const sub = SUBREDDITS[i]!;
     console.log(`\n[${i + 1}/${SUBREDDITS.length}] Fetching r/${sub}...`);
     
+    const subredditPosts: { title: string; url: string; subreddit: string }[] = [];
+    
     try {
       const posts = await reddit.getSubreddit(sub).getHot({ limit: POST_LIMIT });
       console.log(`Fetched ${posts.length} posts from r/${sub}`);
       
-      let foundInSub = 0;
       for (const post of posts) {
         if (
           !history.has(post.id) &&
           containsKeyword(post.title + " " + post.selftext)
         ) {
-          newPosts.push({
+          subredditPosts.push({
             title: post.title,
             url: `https://reddit.com${post.permalink}`,
             subreddit: sub,
           });
           history.add(post.id);
-          foundInSub++;
         }
       }
       
-      if (foundInSub > 0) {
-        console.log(`  > Found ${foundInSub} relevant post(s)`);
+      if (subredditPosts.length > 0) {
+        console.log(`  > Found ${subredditPosts.length} relevant post(s)`);
+        console.log(`\nPosts from r/${sub}:\n`);
+        subredditPosts.forEach((p) =>
+          console.log(`[${p.subreddit}] ${p.title}\n  ${p.url}\n`)
+        );
+
+        try {
+          await sendToSlack(subredditPosts);
+          await saveHistory(history);
+        } catch (error) {
+          console.error("Failed to send to Slack:", error);
+        }
+      } else {
+        console.log(`  > No relevant posts found`);
       }
     } catch (error) {
       console.error(`ERROR fetching r/${sub}:`, error);
     }
 
     if (i < SUBREDDITS.length - 1) {
-      console.log(`Waiting 1 minute before next subreddit...`);
+      console.log(`Waiting 10 minutes before next subreddit...`);
       await delay(DELAY_BETWEEN_SUBREDDITS);
     }
   }
 
-  if (newPosts.length > 0) {
-    console.log(`\nFound ${newPosts.length} new relevant posts:\n`);
-    newPosts.forEach((p) =>
-      console.log(`[${p.subreddit}] ${p.title}\n  ${p.url}\n`)
-    );
-
-    try {
-      await sendToSlack(newPosts);
-    } catch (error) {
-      console.error("Failed to send to Slack:", error);
-    }
-  } else {
-    console.log("\nNo new relevant posts found this run.");
-  }
-
-  await saveHistory(history);
-  console.log(`Fetch completed at ${new Date().toLocaleString()}`);
+  console.log(`\nFetch completed at ${new Date().toLocaleString()}`);
 }
 
 console.log("Reddit Bot starting...");
