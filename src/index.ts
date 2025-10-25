@@ -182,13 +182,12 @@ async function fetchPosts() {
 console.log("Reddit Bot starting...");
 fetchPosts().catch(console.error);
 
-cron.schedule("0 */12 * * *", () => {
+cron.schedule("0 12 * * *", () => {
   console.log("\nCron job triggered");
   fetchPosts().catch(console.error);
 });
 
-console.log("Cron job scheduled: Every 12 hours");
-console.log("Next runs will be at: 00:00, 12:00, 00:00, etc.");
+console.log("Cron job scheduled: Every day at 12:00 PM");
 
 process.on("SIGINT", () => {
   console.log("\nShutting down gracefully...");
