@@ -17,7 +17,7 @@ const reddit = new Snoowrap({
   password: process.env.REDDIT_PASSWORD!,
 });
 
-const slackClient = new WebClient(process.env.SLACK_SECRET);
+const slackClient = new WebClient(process.env.SLACK_TOKEN);
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID!;
 
 const SUBREDDITS = [
