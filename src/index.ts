@@ -3,8 +3,11 @@ import dotenv from "dotenv";
 import fs from "fs/promises";
 import { WebClient } from "@slack/web-api";
 import cron from "node-cron";
+import express from 'express'
 
 dotenv.config();
+
+const app = express();
 
 const reddit = new Snoowrap({
   userAgent: "linkrunner-reddit-bot/1.0.0 by u/your_reddit_username",
@@ -71,7 +74,7 @@ const KEYWORDS = [
 
 const HISTORY_FILE = "./history.json";
 const POST_LIMIT = 40;
-const DELAY_BETWEEN_SUBREDDITS = 600000;
+const DELAY_BETWEEN_SUBREDDITS = 60000;
 
 async function loadHistory(): Promise<Set<string>> {
   try {
@@ -187,4 +190,11 @@ console.log("Cron job scheduled: Every day at 12:00 PM");
 process.on("SIGINT", () => {
   console.log("\nShutting down gracefully...");
   process.exit(0);
+});
+
+
+const PORT = process.env.PORT
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
