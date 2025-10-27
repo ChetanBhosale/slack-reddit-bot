@@ -270,12 +270,12 @@ async function startBot() {
 
   console.log("Reddit Bot starting...");
 
-  cron.schedule("0 12 * * *", () => {
+  cron.schedule("0 14 * * *", () => {
     console.log("\nCron job triggered");
     fetchPosts().catch(console.error);
   });
 
-  console.log("Cron job scheduled: Every day at 12:00 PM");
+  console.log("Cron job scheduled: Every day at 2:00 PM");
 }
 
 startBot().catch(console.error);
@@ -289,7 +289,7 @@ process.on("SIGINT", async () => {
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.json({ status: "Reddit Bot is running", nextRun: "12:00 PM daily" });
+  res.json({ status: "Reddit Bot is running", nextRun: "2:00 PM daily" });
 });
 
 app.listen(PORT, () => {
