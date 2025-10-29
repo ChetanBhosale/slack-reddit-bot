@@ -101,6 +101,7 @@ const SUBREDDITS = [
 ];
 
 const KEYWORDS = [
+  // Original keywords
   "attribution",
   "mmp",
   "deep link",
@@ -123,10 +124,60 @@ const KEYWORDS = [
   "ads tracking",
   "install tracking",
   "track uninstall",
+  
+  // Additional Linkrunner-related keywords
+  "mobile measurement partner",
+  "app analytics",
+  "campaign performance",
+  "user retention",
+  "deferred deep linking",
+  "app attribution",
+  "marketing attribution",
+  "roas tracking",
+  "return on ad spend",
+  "multi-touch attribution",
+  "influencer tracking",
+  "link in bio",
+  "qr code tracking",
+  "app marketing analytics",
+  "conversion tracking",
+  "app growth",
+  "user engagement",
+  "sdk integration",
+  "react native sdk",
+  "flutter sdk",
+  "expo sdk",
+  "unity sdk",
+  "customer data platform",
+  "cdp",
+  "affordable mmp",
+  "cheap attribution",
+  "attribution cost",
+  "app download tracking",
+  "click tracking",
+  "organic attribution",
+  "paid campaign tracking",
+  "meta ads tracking",
+  "google ads tracking",
+  "youtube ads tracking",
+  "app store optimization",
+  "product hunt launch",
+  "user acquisition cost",
+  "ltv tracking",
+  "lifetime value",
+  "cohort analysis",
+  "user funnel",
+  "drop-off tracking",
+  "onboarding tracking",
+  "privacy compliant attribution",
+  "ios privacy",
+  "android privacy",
+  "skadnetwork",
+  "app marketing roi",
 ];
 
-const POST_LIMIT = 40;
-const DELAY_BETWEEN_SUBREDDITS = 600000;
+const POST_LIMIT = 500;
+const DELAY_BETWEEN_SUBREDDITS = 300000; // 5 minutes in milliseconds
 
 async function connectDB() {
   try {
@@ -218,7 +269,7 @@ async function fetchPosts() {
     }[] = [];
 
     try {
-      const posts = await reddit.getSubreddit(sub).getNew({ limit: POST_LIMIT });
+      const posts = await reddit.getSubreddit(sub).getHot({ limit: POST_LIMIT });
       console.log(`Fetched ${posts.length} posts from r/${sub}`);
 
       for (const post of posts) {
@@ -257,7 +308,7 @@ async function fetchPosts() {
     }
 
     if (i < SUBREDDITS.length - 1) {
-      console.log(`Waiting 10 minutes before next subreddit...`);
+      console.log(`Waiting 5 minutes before next subreddit...`);
       await delay(DELAY_BETWEEN_SUBREDDITS);
     }
   }
@@ -270,12 +321,28 @@ async function startBot() {
 
   console.log("Reddit Bot starting...");
 
-  cron.schedule("0 14 * * *", () => {
-    console.log("\nCron job triggered");
-    fetchPosts().catch(console.error);
-  });
+  // Run immediately on first start
+  console.log("\n🚀 Running initial fetch on startup...");
+  await fetchPosts().catch(console.error);
 
-  console.log("Cron job scheduled: Every day at 2:00 PM");
+  // Schedule for 11:00 AM IST (Asia/Kolkata timezone)
+  // Cron format: minute hour day month dayOfWeek
+  // 0 11 * * * means "at 11:00 AM every day"
+  cron.schedule(
+    "0 11 * * *",
+    () => {
+      console.log("\n⏰ Cron job triggered at 11:00 AM IST");
+      fetchPosts().catch(console.error);
+    },
+    {
+      timezone: "Asia/Kolkata",
+    }
+  );
+
+  console.log("✅ Cron job scheduled: Every day at 11:00 AM IST (Asia/Kolkata)");
+  console.log(`📊 Total keywords monitored: ${KEYWORDS.length}`);
+  console.log(`📱 Total subreddits monitored: ${SUBREDDITS.length}`);
+  console.log(`⏱️  Delay between subreddits: 5 minutes`);
 }
 
 startBot().catch(console.error);
@@ -289,9 +356,16 @@ process.on("SIGINT", async () => {
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.json({ status: "Reddit Bot is running", nextRun: "2:00 PM daily" });
+  res.json({ 
+    status: "Reddit Bot is running", 
+    nextRun: "11:00 AM daily (IST)",
+    timezone: "Asia/Kolkata",
+    totalKeywords: KEYWORDS.length,
+    totalSubreddits: SUBREDDITS.length,
+    delayBetweenSubreddits: "5 minutes"
+  });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🌐 Server is running on port ${PORT}`);
 });
